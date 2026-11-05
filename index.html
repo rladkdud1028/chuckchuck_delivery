@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>척척! 무엇이든 전해드려요</title>
-<!-- 무료 실시간 클라우드 동기화 라이브러리(Firebase) 탑재 -->
+<!-- Firebase 라이브러리 로드 -->
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 <style>
@@ -16,7 +16,7 @@
 <header class="top">
   <div>
     <div class="brand">🚚 척척! 무엇이든 전해드려요</div>
-    <div class="sub">한빛반 주문·배달 놀이 앱 <span id="sync-status" class="tag" style="background:#ccefe5;margin-left:6px;">🟢 실시간 연동중</span></div>
+    <div class="sub">한빛반 주문·배달 놀이 앱 <span id="sync-status" class="tag" style="background:#ccefe5;margin-left:6px;">🟢 실시간 연동 중</span></div>
   </div>
   <button class="soft no-print" onclick="home()">처음 화면</button>
 </header>
@@ -25,11 +25,11 @@
 <script>
 const seed=[
 ['음식점','김밥',2000,'🍙'],['음식점','커피',1500,'☕'],['음식점','음료수',1000,'🧃'],['음식점','케이크',2500,'🍰'],['음식점','주먹밥',1500,'🍘'],['음식점','식빵',1000,'🍞'],['음식점','롤케이크',2000,'🍥'],
-['장난감 가게','키링 인형 (랜덤 배송)',2000,'🧸'],['장난감 가게','자동차',1500,'🚗'],['장난감 가게','레고 블록',2500,'🧱'],['장난감 가게','벽돌 블록',2000,'🧱'],['장난감 가게','나무 블록',2000,'🪵'],['장난감 가게','동화책',2500,'📚'],['장난감 가게','팝잇',1500,'🫧'],['장난감 가게','벌집피젯',1500,'🐝'],
+['장난감 가게','키링 인형 (랜덤 배송)',2000,'🧸'],['장난감 가게','자동차',1500,'🚗'],['장난감 가게','레고 블록',2500,'🧱'],['장난감 가게','벽돌 블록',2000,'🧱'],['장난감 가게','나무 블록',2000,'🪵'],[' 장난감 가게','동화책',2500,'📚'],['장난감 가게','팝잇',1500,'🫧'],['장난감 가게','벌집피젯',1500,'🐝'],
 ['생활용품점','컵',1000,'🥤'],['생활용품점','접시',1000,'🍽️'],['생활용품점','숟가락',500,'🥄'],['생활용품점','모자',2000,'🧢'],['생활용품점','미용놀잇감',2500,'💇'],['생활용품점','병원놀잇감',2500,'🩺']];
 
 // ==========================================
-// ☁️ 무설정 클라우드 실시간 동기화 연결
+// 🌐 클라우드 실시간 동기화 엔진 (모바일 <-> PC 공용)
 // ==========================================
 const firebaseConfig = {
     databaseURL: "https://chuckchuck-delivery-default-rtdb.asia-southeast1.firebasedatabase.app/"
@@ -42,13 +42,13 @@ const db = firebase.database();
 let KEY='hanbit_delivery_v1';
 let data={products:seed.map((x,i)=>({id:'p'+i,shop:x[0],name:x[1],price:x[2],emoji:x[3],image:''})),orders:[],closed:false,sound:true,pinSet:false,pin:''};
 let cart=[],shop='전체',mode='home',adminTab='상품 관리',filter='전체';
+let isInitialLoad = true;
 
-// 클라우드 데이터 실시간 수신 (다른 기기에서 주문하면 즉시 반영)
-db.ref('hanbit_app_data').on('value', (snapshot) => {
+// 클라우드 데이터 실시간 수신 리스너
+db.ref('hanbit_app_data_v2').on('value', (snapshot) => {
     const cloudData = snapshot.val();
     if (cloudData) {
-        // 기존 데이터보다 주문 수가 늘었거나 변경되었을 때 알림음 재생 조건 체크
-        if (cloudData.orders && data.orders && cloudData.orders.length > data.orders.length) {
+        if (!isInitialLoad && cloudData.orders && data.orders && cloudData.orders.length > data.orders.length) {
             beep();
         }
         data = cloudData;
@@ -56,14 +56,16 @@ db.ref('hanbit_app_data').on('value', (snapshot) => {
         if (!data.orders) data.orders = [];
         render();
     } else {
-        save(); // 최초 상태 업로드
+        // 최초 실행 시 기본 데이터 등록
+        save();
     }
+    isInitialLoad = false;
 });
 
 function save(){
-    // 브라우저 로컬 저장 + 클라우드(Firebase) DB에 동시 저장
+    // 로컬과 클라우드 DB에 동시 반영하여 모바일/PC 어디서든 즉시 동기화
     localStorage.setItem(KEY, JSON.stringify(data));
-    db.ref('hanbit_app_data').set(data);
+    db.ref('hanbit_app_data_v2').set(data);
 }
 // ==========================================
 
@@ -101,5 +103,4 @@ function clearOrders(){if(confirm('모든 날짜의 주문 내역을 삭제할�
 function settingsAdmin(){return `<div class="order"><h3>주문 접수</h3><p>${data.closed?'현재 주문 마감 상태입니다.':'현재 주문을 받고 있습니다.'}</p><button class="${data.closed?'primary':'danger'}" onclick="data.closed=!data.closed;save();render()">${data.closed?'주문 재개':'주문 마감'}</button></div><div class="order" style="margin-top:12px"><h3>신규 주문 알림음</h3><p>현재 ${data.sound?'켜짐':'꺼짐'}</p><button onclick="data.sound=!data.sound;save();render()">${data.sound?'알림음 끄기':'알림음 켜기'}</button><button class="soft" onclick="beep()">소리 미리 듣기</button></div><div class="order" style="margin-top:12px"><h3>데이터 백업</h3><p class="muted">이 브라우저의 상품·주문 데이터를 파일로 저장하거나 복원할 수 있어요.</p><button onclick="backup()">백업 파일 다운로드</button><input type="file" accept="application/json" onchange="restore(this)" style="margin-top:10px"></div>`}
 function backup(){let b=new Blob([JSON.stringify(data)],{type:'application/json'}),u=URL.createObjectURL(b),a=document.createElement('a');a.href=u;a.download='hanbit-delivery-backup.json';a.click();URL.revokeObjectURL(u)}
 function restore(inp){let f=inp.files[0];if(!f)return;let r=new FileReader();r.onload=()=>{try{let x=JSON.parse(r.result);if(!x.products||!x.orders)throw 0;data=x;save();render();alert('복원했어요.')}catch(e){alert('백업 파일을 읽을 수 없어요.')}};r.readAsText(f)}
-render();
 </script></body></html>
